@@ -161,6 +161,27 @@ export class App extends Component<{}, St> {
       })
     }, 260)
     try {
+      const qs = new URLSearchParams(location.search)
+      if (qs.has('hw') || qs.has('model')) {
+        const hws = (qs.get('hw') || '').split(','), models = (qs.get('model') || '').split(','), quants = (qs.get('quant') || '').split(',')
+        const n = Math.min(2, Math.max(hws.length, models.length, quants.length))
+        const cfgs: Cfg[] = []
+        for (let i = 0; i < n; i++) {
+          const cfg = { hw: hws[i] || hws[0], model: models[i] || models[0], quant: quants[i] || quants[0] }
+          if (HW.some(h => h.id === cfg.hw) && MODELS.some(m => m.id === cfg.model) && QUANTS.some(x => x.id === cfg.quant)) cfgs.push(cfg)
+        }
+        const patch: Partial<St> = {}
+        if (cfgs.length) patch.cfgs = cfgs
+        const p = qs.get('preset')
+        if (p !== null && PRESETS[+p]) patch.preset = +p
+        const t = qs.get('prompt')
+        if (t) patch.custom = t.slice(0, 2000)
+        this.setState(patch, () => { if (qs.get('run') === '1') setTimeout(() => this.run(), 600) })
+        return
+      }
+    } catch (e) { }
+    // legacy share links: base64 config in the #s= hash
+    try {
       const hm = location.hash.match(/s=([^&]+)/)
       if (hm) {
         const d = JSON.parse(atob(decodeURIComponent(hm[1])))
@@ -325,9 +346,14 @@ export class App extends Component<{}, St> {
 
   share() {
     const s = this.state
-    const d: { c: Cfg[]; p: number; r: number; t?: string } = { c: s.cfgs, p: s.preset, r: 1 }
-    if (s.custom !== null) d.t = s.custom.slice(0, 2000)
-    const url = location.origin + location.pathname + '#s=' + encodeURIComponent(btoa(JSON.stringify(d)))
+    const q = new URLSearchParams()
+    q.set('hw', s.cfgs.map(c => c.hw).join(','))
+    q.set('model', s.cfgs.map(c => c.model).join(','))
+    q.set('quant', s.cfgs.map(c => c.quant).join(','))
+    if (s.custom !== null) q.set('prompt', s.custom.slice(0, 2000))
+    else q.set('preset', String(s.preset))
+    q.set('run', '1')
+    const url = 'https://llmspeed.dev/?' + q.toString().replace(/%2C/g, ',')
     ;(navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject()).catch(() => { })
     this.setState({ shared: true })
     clearTimeout(this._shT)
