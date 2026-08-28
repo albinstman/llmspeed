@@ -1,0 +1,38 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// devcontainers documentation: https://containers.dev
+{
+	"name": "llmspeed-devcontainer",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"runArgs": ["--name", "llmspeed-devcontainer"],
+	"remoteUser": "root",
+	"containerUser": "root",
+	"features": {
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+	},
+	"mounts": [
+		"source=camoufox-devcontainer-bashhistory-${devcontainerId},target=/commandhistory,type=volume",
+		"source=/tmp/gh-devcontainer-token,target=/root/.gh-token,type=bind",
+		"source=/run/host-services/ssh-auth.sock,target=/ssh-agent,type=bind"
+	],
+	"remoteEnv": {
+		"SSH_AUTH_SOCK": "/ssh-agent",
+		"IS_SANDBOX": "1"
+	},
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"ms-azuretools.vscode-docker",
+				"bierner.markdown-preview-github-styles",
+				"github.vscode-github-actions",
+				"albinstman.claude-bridge"
+			]
+		}
+	},
+	// Runs on the host before the container starts.
+	"initializeCommand": "gh auth token > /tmp/gh-devcontainer-token 2>/dev/null || true; chmod 600 /tmp/gh-devcontainer-token",
+	// Authenticate GitHub CLI and install Claude Code
+	"postCreateCommand": "if [ -s /root/.gh-token ]; then gh auth login --with-token < /root/.gh-token 2>/dev/null && echo 'gh CLI authenticated'; fi && curl -fsSL https://claude.ai/install.sh | bash && npm install"
+}

@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;padding:0;background:#0f1115;color:#e8eaee;font-family:'Space Grotesk',sans-serif}
+*{box-sizing:border-box}
+a{color:oklch(0.75 0.15 25)}a:hover{color:oklch(0.82 0.13 25)}
+select,textarea,input,button{font:inherit;color:inherit}
+textarea:focus,select:focus,button:focus{outline:none}
+input[type=range]{accent-color:oklch(0.75 0.15 25)}
+::selection{background:oklch(0.75 0.15 25 / .35)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#2a2f39;border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+</style>
+</helmet>
+<div data-screen-label="Simulator" style="display:flex; height:100vh; background:#0f1115; color:#e8eaee; font-family:'Space Grotesk',sans-serif; overflow:hidden">
+  <aside style="width:304px; flex-shrink:0; border-right:1px solid #21252e; display:flex; flex-direction:column; gap:0; overflow-y:auto">
+    <div style="padding:22px 22px 18px; border-bottom:1px solid #21252e">
+      <div style="display:flex; align-items:baseline; gap:8px">
+        <span style="font-weight:700; font-size:20px; letter-spacing:-0.02em">dryrun</span>
+        <span style="width:7px; height:7px; border-radius:2px; background:oklch(0.75 0.15 25); display:inline-block"></span>
+      </div>
+      <div style="font-size:12px; color:#8b93a1; margin-top:4px">Feel a local model before you buy the hardware</div>
+    </div>
+    <div style="padding:20px 22px; display:flex; flex-direction:column; gap:18px">
+      <div>
+        <label style="display:block; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#8b93a1; margin-bottom:7px">Hardware</label>
+        <div style="position:relative">
+          <select value="{{hw}}" onChange="{{setHw}}" style="width:100%; appearance:none; background:#171a21; border:1px solid #2a2f39; border-radius:8px; padding:10px 30px 10px 12px; font-size:13.5px; cursor:pointer">
+            <sc-for list="{{hwList}}" as="h" hint-placeholder-count="4"><option value="{{h.id}}">{{h.name}}</option></sc-for>
+          </select>
+          <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); pointer-events:none; color:#8b93a1; font-size:11px">▾</span>
+        </div>
+      </div>
+      <div>
+        <label style="display:block; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#8b93a1; margin-bottom:7px">Model</label>
+        <div style="position:relative">
+          <select value="{{model}}" onChange="{{setModel}}" style="width:100%; appearance:none; background:#171a21; border:1px solid #2a2f39; border-radius:8px; padding:10px 30px 10px 12px; font-size:13.5px; cursor:pointer">
+            <sc-for list="{{modelList}}" as="m" hint-placeholder-count="4"><option value="{{m.id}}">{{m.name}}</option></sc-for>
+          </select>
+          <span style="position:absolute; right:12px; top:50%; transform:translateY(-50%); pointer-events:none; color:#8b93a1; font-size:11px">▾</span>
+        </div>
+      </div>
+      <div>
+        <label style="display:block; font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#8b93a1; margin-bottom:7px">Quantization</label>
+        <div style="display:flex; gap:6px">
+          <sc-for list="{{quantBtns}}" as="q" hint-placeholder-count="3">
+            <button onClick="{{q.pick}}" style="{{q.style}}">{{q.label}}</button>
+          </sc-for>
+        </div>
+        <div style="font-size:11.5px; color:#697180; margin-top:6px; font-family:'IBM Plex Mono',monospace">{{quantNote}}</div>
+      </div>
+    </div>
+    <div style="margin:0 22px; border-top:1px solid #21252e"></div>
+    <div style="padding:20px 22px">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px">
+        <span style="font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#8b93a1">Memory fit</span>
+        <span style="{{fitChipStyle}}">{{fitLabel}}</span>
+      </div>
+      <div style="height:8px; border-radius:4px; background:#1c2029; overflow:hidden; position:relative">
+        <div style="{{fitBarStyle}}"></div>
+      </div>
+      <div style="display:flex; justify-content:space-between; font-size:11.5px; font-family:'IBM Plex Mono',monospace; color:#8b93a1; margin-top:7px">
+        <span>{{fitNeed}}</span><span>{{fitHave}}</span>
+      </div>
+      <div style="font-size:12.5px; color:#aab1bd; margin-top:10px; line-height:1.5">{{fitDetail}}</div>
+      <sc-if value="{{suggShow}}" hint-placeholder-val="{{false}}">
+        <button onClick="{{applySugg}}" style="margin-top:10px; width:100%; text-align:left; background:oklch(0.75 0.15 25 / .1); border:1px solid oklch(0.75 0.15 25 / .35); color:oklch(0.82 0.13 30); border-radius:8px; padding:9px 12px; font-size:12.5px; cursor:pointer" style-hover="background:oklch(0.75 0.15 25 / .18)">{{suggLabel}}</button>
+      </sc-if>
+    </div>
+    <div style="margin-top:auto; padding:16px 22px; border-top:1px solid #21252e; font-size:11px; color:#565e6c; line-height:1.6">Simulated figures — placeholder math, not benchmarks. Real measurements coming.</div>
+  </aside>
+  <main style="flex:1; display:flex; flex-direction:column; min-width:0">
+    <div style="border-bottom:1px solid #21252e; padding:14px 26px; display:flex; align-items:center; gap:28px; flex-wrap:wrap">
+      <div>
+        <div style="font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:#697180; margin-bottom:2px">Decode speed</div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:21px; font-weight:600; color:#e8eaee">{{statRange}} <span style="font-size:12px; color:#8b93a1; font-weight:400">tok/s</span></div>
+      </div>
+      <div>
+        <div style="font-size:10.5px; letter-spacing:0.08em; text-transform:uppercase; color:#697180; margin-bottom:2px">Time to first token</div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:21px; font-weight:600; color:#e8eaee">{{statTtft}}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:7px; padding:5px 11px; border-radius:99px; border:1px solid #2a2f39; background:#14171d">
+        <span style="{{confDotStyle}}"></span>
+        <span style="font-size:12px; color:#c7cdd6">{{confLabel}}</span>
+      </div>
+      <div style="margin-left:auto; display:flex; align-items:center; gap:14px">
+        <button onClick="{{toggleSlow}}" style="{{slowBtnStyle}}">{{slowLabel}}</button>
+        <sc-if value="{{showReplay}}" hint-placeholder-val="{{false}}">
+          <button onClick="{{replay}}" style="background:none; border:1px solid #2a2f39; color:#c7cdd6; border-radius:7px; padding:6px 12px; font-size:12.5px; cursor:pointer" style-hover="border-color:#3a4150; color:#e8eaee">↺ Replay</button>
+        </sc-if>
+        <button onClick="{{toggleBreakdown}}" style="background:none; border:none; color:#8b93a1; font-size:12.5px; cursor:pointer; padding:6px 0" style-hover="color:#e8eaee">{{breakdownToggleLabel}}</button>
+      </div>
+    </div>
+    <sc-if value="{{breakdownOpen}}" hint-placeholder-val="{{false}}">
+      <div style="border-bottom:1px solid #21252e; background:#12141a; padding:16px 26px 18px">
+        <div style="display:flex; flex-direction:column; gap:8px; max-width:760px">
+          <sc-for list="{{breakdown}}" as="b" hint-placeholder-count="5">
+            <div style="display:flex; gap:14px; align-items:baseline; font-family:'IBM Plex Mono',monospace; font-size:12.5px">
+              <span style="color:#565e6c; width:16px; flex-shrink:0">{{b.n}}</span>
+              <span style="color:#aab1bd; flex:1">{{b.f}}</span>
+              <span style="color:#e8eaee; white-space:nowrap">{{b.v}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:14px; font-size:11.5px; color:#697180; display:flex; gap:18px; flex-wrap:wrap">
+          <span><span style="color:oklch(0.78 0.16 155)">●</span> measured on real hardware</span>
+          <span><span style="color:oklch(0.82 0.14 90)">●</span> derived from family benchmarks</span>
+          <span><span style="color:oklch(0.74 0.16 55)">●</span> first-principles estimate</span>
+        </div>
+      </div>
+    </sc-if>
+    <div ref="{{scrollRef}}" style="flex:1; overflow-y:auto; padding:26px; display:flex; flex-direction:column; gap:20px">
+      <sc-if value="{{emptyChat}}" hint-placeholder-val="{{true}}">
+        <div style="margin:auto; text-align:center; color:#565e6c; max-width:380px">
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; margin-bottom:8px">{{emptyLine}}</div>
+          <div style="font-size:13px; line-height:1.6">Pick a config, choose a prompt preset or type your own, then run to feel the speed.</div>
+        </div>
+      </sc-if>
+      <sc-for list="{{messages}}" as="m" hint-placeholder-count="0">
+        <div style="{{m.wrapStyle}}">
+          <div style="{{m.bubbleStyle}}">{{m.text}}</div>
+          <sc-if value="{{m.meta}}" hint-placeholder-val="{{false}}">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#565e6c; margin-top:6px">{{m.meta}}</div>
+          </sc-if>
+        </div>
+      </sc-for>
+      <sc-if value="{{isPrefill}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex; flex-direction:column; gap:6px">
+          <div style="display:flex; align-items:center; gap:10px; font-family:'IBM Plex Mono',monospace; font-size:13px; color:oklch(0.82 0.13 30)">
+            <span>{{spinner}}</span>
+            <span>{{prefillStatus}}</span>
+            <span style="color:#565e6c">{{prefillClock}}</span>
+          </div>
+          <sc-if value="{{compressNote}}" hint-placeholder-val="{{false}}">
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:11px; color:#565e6c; padding-left:24px">{{compressNote}}</div>
+          </sc-if>
+        </div>
+      </sc-if>
+      <sc-if value="{{isStream}}" hint-placeholder-val="{{false}}">
+        <div style="max-width:720px">
+          <div style="display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:oklch(0.82 0.13 30); margin-bottom:8px">
+            <span style="animation:pulse 1.1s ease-in-out infinite">●</span>
+            <span>{{liveTokLabel}}</span>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:13.5px; line-height:1.75; color:#d9dde4; white-space:pre-wrap">{{streamText}}<span style="display:inline-block; width:8px; height:16px; background:oklch(0.75 0.15 25); vertical-align:-2px; margin-left:2px; animation:blink 1s step-end infinite"></span></div>
+        </div>
+      </sc-if>
+    </div>
+    <div style="border-top:1px solid #21252e; padding:16px 26px 20px">
+      <sc-if value="{{wontRun}}" hint-placeholder-val="{{false}}">
+        <div style="border:1px solid oklch(0.55 0.14 25 / .5); background:oklch(0.55 0.14 25 / .08); border-radius:10px; padding:14px 16px; margin-bottom:14px; max-width:760px">
+          <div style="font-weight:600; font-size:14px; color:oklch(0.78 0.12 25)">This combination won't run</div>
+          <div style="font-size:13px; color:#aab1bd; margin-top:4px; line-height:1.55">{{wontRunDetail}}</div>
+        </div>
+      </sc-if>
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px; max-width:760px">
+        <span style="font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#8b93a1; flex-shrink:0">Prompt preset</span>
+        <input type="range" min="0" max="3" step="1" value="{{preset}}" onChange="{{setPreset}}" style="flex:1; cursor:pointer">
+        <span style="{{customChipStyle}}">{{promptTokLabel}}</span>
+      </div>
+      <div style="display:flex; gap:6px; margin-bottom:12px; max-width:760px">
+        <sc-for list="{{presetBtns}}" as="p" hint-placeholder-count="4">
+          <button onClick="{{p.pick}}" style="{{p.style}}">{{p.label}}</button>
+        </sc-for>
+      </div>
+      <div style="display:flex; gap:12px; align-items:stretch; max-width:760px">
+        <textarea value="{{promptText}}" onChange="{{setCustom}}" rows="3" placeholder="Type a prompt, or pick a preset above…" style="flex:1; resize:none; background:#171a21; border:1px solid #2a2f39; border-radius:10px; padding:12px 14px; font-size:13.5px; font-family:'IBM Plex Mono',monospace; line-height:1.55; color:#e8eaee"></textarea>
+        <button onClick="{{runOrStop}}" style="{{runBtnStyle}}">{{runLabel}}</button>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;compressWaits&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Simulation&quot;},&quot;speedJitter&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Simulation&quot;}}">
+class Component extends DCLogic {
+  state = { hw:'rtx4090', model:'llama31-8b', quant:'q4', preset:0, custom:null, phase:'idle',
+    streamText:'', liveTok:0, prefillT:0, slowEnd:false, breakdownOpen:false, history:[] };
+
+  HW = [
+    {id:'rtx3060',name:'NVIDIA · RTX 3060 12GB',vram:12,bw:360,fam:'nvidia',eff:.55,meas:1},
+    {id:'rtx4070',name:'NVIDIA · RTX 4070 12GB',vram:12,bw:504,fam:'nvidia',eff:.55},
+    {id:'rtx4070ts',name:'NVIDIA · RTX 4070 Ti Super 16GB',vram:16,bw:672,fam:'nvidia',eff:.55},
+    {id:'rtx4090',name:'NVIDIA · RTX 4090 24GB',vram:24,bw:1008,fam:'nvidia',eff:.55,meas:1},
+    {id:'rtx5090',name:'NVIDIA · RTX 5090 32GB',vram:32,bw:1792,fam:'nvidia',eff:.5,meas:1},
+    {id:'m2pro',name:'Apple · M2 Pro 16GB',vram:16,bw:200,fam:'apple',eff:.7},
+    {id:'m4pro',name:'Apple · M4 Pro 24GB',vram:24,bw:273,fam:'apple',eff:.7},
+    {id:'m3max',name:'Apple · M3 Max 48GB',vram:48,bw:400,fam:'apple',eff:.7,meas:1},
+    {id:'m4max',name:'Apple · M4 Max 128GB',vram:128,bw:546,fam:'apple',eff:.7},
+    {id:'rx7900xt',name:'AMD · RX 7900 XT 20GB',vram:20,bw:800,fam:'amd',eff:.42},
+    {id:'rx7900xtx',name:'AMD · RX 7900 XTX 24GB',vram:24,bw:960,fam:'amd',eff:.42},
+    {id:'a100',name:'Datacenter · A100 80GB',vram:80,bw:2039,fam:'dc',eff:.6},
+    {id:'h100',name:'Datacenter · H100 80GB',vram:80,bw:3350,fam:'dc',eff:.6}
+  ];
+  MODELS = [
+    {id:'llama31-8b',name:'Llama 3.1 8B',p:8,a:8},
+    {id:'llama33-70b',name:'Llama 3.3 70B',p:70,a:70},
+    {id:'qwen25-7b',name:'Qwen 2.5 7B',p:7.6,a:7.6},
+    {id:'qwen25-32b',name:'Qwen 2.5 32B',p:32,a:32},
+    {id:'qwen25-72b',name:'Qwen 2.5 72B',p:72,a:72},
+    {id:'mistral7b',name:'Mistral 7B',p:7.2,a:7.2},
+    {id:'mixtral',name:'Mixtral 8×7B',p:46.7,a:12.9},
+    {id:'r1-14b',name:'DeepSeek R1 Distill 14B',p:14.8,a:14.8},
+    {id:'r1-32b',name:'DeepSeek R1 Distill 32B',p:32.8,a:32.8},
+    {id:'phi4',name:'Phi-4 14B',p:14.7,a:14.7}
+  ];
+  QUANTS = [{id:'q4',label:'Q4_K_M',bpw:4.6},{id:'q8',label:'Q8_0',bpw:8.5},{id:'f16',label:'FP16',bpw:16}];
+  PRESETS = [
+    {label:'Short chat', tok:42, text:"What's the practical difference between RAM and VRAM for running local models? Keep it brief."},
+    {label:'Email draft', tok:290, text:"Draft a polite email to my landlord about the broken heating. Notes: reported it twice already (Oct 12, Oct 19), no response. Lease says repairs within 14 days. I want a firm but friendly tone, mention I'll escalate to the tenancy board if not fixed by end of month. Sign as Sam."},
+    {label:'Code file', tok:1800, text:"Review this file for bugs and suggest fixes:\n\nfunction debounce(fn, wait) {\n  let t;\n  return (...args) => {\n    clearTimeout(t);\n    t = setTimeout(() => fn(args), wait);\n  };\n}\n\nasync function fetchUsers(ids) {\n  const out = [];\n  ids.forEach(async id => {\n    const r = await fetch('/api/users/' + id);\n    out.push(r.json());\n  });\n  return out;\n}\n\n… [file continues — ~1,800 tokens total]"},
+    {label:'20-page doc', tok:12500, text:"Summarize the key obligations, deadlines, and termination clauses in this services agreement:\n\nMASTER SERVICES AGREEMENT — This Agreement is entered into as of the Effective Date by and between the Client and the Provider. 1. SERVICES. Provider shall perform the services described in each Statement of Work…\n\n… [document continues — ~12,500 tokens total]"}
+  ];
+  RESP = [
+    "RAM is your system's general-purpose working memory — the CPU uses it for everything. VRAM is memory that lives on the graphics card, wired directly to the GPU with much higher bandwidth. For local models that distinction is the whole game: the model's weights have to be read once per generated token, so whichever memory holds the weights sets your speed. Weights in VRAM stream at hundreds of GB/s; spill into system RAM and you drop to a tenth of that. Practical rule: buy enough VRAM to hold the model you actually want to run, at the quantization you can tolerate. Speed is mostly memory bandwidth, capacity decides what fits.",
+    "Here's a draft you can send:\n\nSubject: Heating repair — follow-up and next steps\n\nHi [Landlord's name],\n\nI'm writing to follow up on the broken heating in my unit, which I reported on October 12 and again on October 19 without a response. As the weather is getting colder, this is becoming urgent.\n\nPer the lease, repairs are to be completed within 14 days of notice — we're now well past that window from my first report. I'd genuinely prefer to resolve this directly: could you confirm by Friday when a repair visit will happen?\n\nIf the heating isn't fixed by the end of the month, I'll need to escalate the matter to the tenancy board, which I'd rather avoid.\n\nThanks for your attention to this.\n\nBest,\nSam",
+    "Two real bugs here.\n\n1. debounce drops the spread. You collect ...args but then call fn(args) — that passes a single array instead of the original arguments. Fix: fn(...args). Also consider preserving `this` by using a function expression and fn.apply(this, args) if it will decorate methods.\n\n2. fetchUsers returns before any fetch resolves. forEach ignores the async callback's promise, so `out` is empty (or partially filled, later — a race). Also r.json() is pushed as a promise, never awaited. Fix:\n\nasync function fetchUsers(ids) {\n  return Promise.all(ids.map(async id => {\n    const r = await fetch('/api/users/' + id);\n    if (!r.ok) throw new Error('user ' + id + ': ' + r.status);\n    return r.json();\n  }));\n}\n\nThat runs requests concurrently, preserves order, and surfaces HTTP errors instead of silently succeeding. If the id list can be large, batch with a small concurrency limit to avoid hammering the API.",
+    "Summary of key obligations, deadlines, and termination provisions:\n\nProvider obligations. Perform services per each Statement of Work to professional standards; assign qualified personnel; deliver work product on the schedule set in the applicable SOW; maintain confidentiality of Client materials indefinitely for trade secrets and five years for other confidential information.\n\nClient obligations. Provide timely access to systems, data, and personnel reasonably needed; review and accept or reject deliverables within 10 business days (silence is deemed acceptance); pay undisputed invoices net-30 from receipt, with 1.5% monthly late interest.\n\nKey deadlines. Deliverable review: 10 business days. Invoice payment: 30 days. Cure period for material breach: 30 days from written notice. Insurance certificates due within 15 days of signing.\n\nTermination. Either party may terminate for uncured material breach after the 30-day cure window. Client may terminate any SOW for convenience on 30 days' written notice, paying for work performed plus non-cancellable commitments. Provider may suspend work if undisputed invoices are 45+ days overdue, after 10 days' notice. Sections on confidentiality, IP assignment, and limitation of liability survive termination."
+  ];
+  SPIN = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏'];
+
+  hwObj(){ return this.HW.find(h=>h.id===this.state.hw); }
+  mObj(){ return this.MODELS.find(m=>m.id===this.state.model); }
+  qObj(){ return this.QUANTS.find(q=>q.id===this.state.quant); }
+  promptTokens(){ const s=this.state; return s.custom!==null ? Math.max(8,Math.ceil(s.custom.length/3.6)) : this.PRESETS[s.preset].tok; }
+  fmt(x){ return x>=10 ? Math.round(x).toString() : x.toFixed(1); }
+
+  calc(hw,m,q,ctx){
+    const w = m.p*q.bpw/8*1.05, aW = m.a*q.bpw/8*1.05;
+    const kv = Math.max(0.15, m.p/8*ctx/8192);
+    const usable = hw.fam==='apple' ? hw.vram*0.75 : hw.vram*0.93;
+    const total = w+kv+0.6;
+    let fit = total<=usable ? 'fits' : (hw.fam!=='apple' && hw.fam!=='dc' && total<=usable*2.4 ? 'partial' : 'no');
+    let base = hw.bw*hw.eff/aW;
+    if(fit==='partial'){ const r=usable/total; base *= Math.max(0.05, r*r*0.45); }
+    const lo=base*0.88, hi=base*1.12;
+    const pre = base*(hw.fam==='apple'?4:12)*(fit==='partial'?0.5:1);
+    const ttft = ctx/pre + (fit==='partial'?1.2:0.3);
+    let conf = null;
+    if(fit==='fits'){
+      const small = m.p<=15;
+      conf = (hw.meas && small && q.id==='q4') ? 'measured' : (hw.meas||small) ? 'derived' : 'estimated';
+    } else if(fit==='partial') conf='estimated';
+    return {w,kv,usable,total,fit,base,lo,hi,ttft,conf};
+  }
+
+  componentDidUpdate(){ if(this._sc && (this.state.phase==='prefill'||this.state.phase==='stream')) this._sc.scrollTop=this._sc.scrollHeight; }
+  componentWillUnmount(){ clearInterval(this.timer); }
+
+  run(){
+    const c=this.calc(this.hwObj(),this.mObj(),this.qObj(),this.promptTokens());
+    if(c.fit==='no') return;
+    const pIdx=this.state.custom!==null?-1:this.state.preset;
+    const words=this.RESP[pIdx<0?0:pIdx].split(' ');
+    const text=this.state.custom!==null?this.state.custom:this.PRESETS[this.state.preset].text;
+    const ttft=c.ttft, compress=(this.props.compressWaits??true)&&ttft>6, wait=compress?6:Math.min(ttft,20);
+    this.runCfg={c,words,compress,ttft,wait,tokIn:this.promptTokens()};
+    this.setState(s=>({history:[...s.history,{role:'user',text}],phase:'prefill',streamText:'',prefillT:0,liveTok:0}));
+    const t0=performance.now();
+    clearInterval(this.timer);
+    this.timer=setInterval(()=>{
+      const el=(performance.now()-t0)/1000;
+      if(el>=wait){ clearInterval(this.timer); this.startStream(); }
+      else this.setState({prefillT:el});
+    },80);
+  }
+  startStream(){
+    const {c,words}=this.runCfg;
+    const rate=this.state.slowEnd?c.lo:c.base;
+    this.setState({phase:'stream',streamText:'',liveTok:rate});
+    let acc=0,i=0,last=performance.now();
+    clearInterval(this.timer);
+    this.timer=setInterval(()=>{
+      const now=performance.now(),dt=(now-last)/1000; last=now;
+      const jit=(this.props.speedJitter??true)?(0.72+Math.random()*0.56):1;
+      acc+=rate*0.72*dt*jit;
+      const n=Math.floor(acc);
+      if(n>0){ acc-=n; i=Math.min(words.length,i+n);
+        this.setState({streamText:words.slice(0,i).join(' '),liveTok:rate*jit}); }
+      if(i>=words.length){ clearInterval(this.timer); this.finish(); }
+    },50);
+  }
+  finish(){
+    const {c,ttft}=this.runCfg;
+    const rate=this.state.slowEnd?c.lo:c.base;
+    const meta=`${this.hwObj().name.split(' · ')[1]} · ${this.mObj().name} · ${this.qObj().label} · ${this.fmt(rate)} tok/s · TTFT ${ttft<10?ttft.toFixed(1):Math.round(ttft)}s${this.state.slowEnd?' · slow end':''}`;
+    this.setState(s=>({phase:'done',history:[...s.history,{role:'assistant',text:s.streamText,meta}],streamText:''}));
+  }
+  stop(){
+    clearInterval(this.timer);
+    if(this.state.phase==='stream') this.finish();
+    else this.setState({phase:'idle'});
+  }
+  replay(){
+    if(!this.runCfg||this.state.phase==='prefill'||this.state.phase==='stream')return;
+    this.setState(s=>{ const h=[...s.history]; if(h.length&&h[h.length-1].role==='assistant')h.pop(); return {history:h,streamText:'',liveTok:0}; });
+    setTimeout(()=>this.startStream(),30);
+  }
+
+  renderVals(){
+    const s=this.state, hw=this.hwObj(), m=this.mObj(), q=this.qObj();
+    const ctx=this.promptTokens();
+    const c=this.calc(hw,m,q,ctx);
+    const busy=s.phase==='prefill'||s.phase==='stream';
+    const accent='oklch(0.75 0.15 25)';
+    const fitColors={fits:'oklch(0.78 0.16 155)',partial:'oklch(0.82 0.14 90)',no:'oklch(0.66 0.17 25)'};
+    const fitLabels={fits:'FITS',partial:'PARTIAL OFFLOAD',no:"WON'T RUN"};
+    const fc=fitColors[c.fit];
+    const pct=Math.min(100,c.total/c.usable*100);
+    const fitDetail = c.fit==='fits'
+      ? `Weights ${c.w.toFixed(1)} GB + KV cache ${c.kv.toFixed(1)} GB sit comfortably in ${hw.fam==='apple'?'unified memory':'VRAM'}.`
+      : c.fit==='partial'
+      ? `${(c.total-c.usable).toFixed(1)} GB spills to system RAM. It runs, but every token pays the PCIe toll — expect roughly a 5–10× slowdown.`
+      : `Needs ${c.total.toFixed(1)} GB; ${c.usable.toFixed(1)} GB usable on this ${hw.fam==='apple'?'machine':'card'}. Nothing to stream — the weights simply don't fit.`;
+    let suggShow=false, suggLabel='', suggQ=null;
+    if(c.fit!=='fits'){
+      for(const alt of this.QUANTS){
+        if(alt.bpw>=q.bpw)continue;
+        const ac=this.calc(hw,m,alt,ctx);
+        if(ac.fit==='fits'){ suggShow=true; suggQ=alt.id; suggLabel=`Try ${alt.label} → ${ac.total.toFixed(1)} GB, fits with ~${this.fmt(ac.lo)}–${this.fmt(ac.hi)} tok/s`; break; }
+      }
+      if(!suggShow && c.fit==='no') suggLabel='';
+    }
+    const confMap={measured:['Measured','oklch(0.78 0.16 155)'],derived:['Derived','oklch(0.82 0.14 90)'],estimated:['Estimated','oklch(0.74 0.16 55)']};
+    const conf=c.conf?confMap[c.conf]:['—','#565e6c'];
+    const breakdown = c.fit==='no' ? [
+      {n:'1',f:`Weights: ${m.p} B params × ${q.bpw} bpw ÷ 8 × 1.05 overhead`,v:`${c.w.toFixed(1)} GB`},
+      {n:'2',f:`KV cache @ ${ctx.toLocaleString()} ctx tokens`,v:`${c.kv.toFixed(1)} GB`},
+      {n:'3',f:`Total vs usable memory (${hw.fam==='apple'?'75% of unified':'93% of VRAM'})`,v:`${c.total.toFixed(1)} / ${c.usable.toFixed(1)} GB`},
+      {n:'4',f:'Result',v:"won't run"}
+    ] : [
+      {n:'1',f:`Weights: ${m.p} B params × ${q.bpw} bpw ÷ 8 × 1.05 overhead`,v:`${c.w.toFixed(1)} GB`},
+      {n:'2',f:`KV cache @ ${ctx.toLocaleString()} ctx tokens`,v:`${c.kv.toFixed(1)} GB`},
+      {n:'3',f:`Fit: ${c.total.toFixed(1)} GB needed vs ${c.usable.toFixed(1)} GB usable`,v:fitLabels[c.fit].toLowerCase()},
+      {n:'4',f:`Decode ≈ bandwidth × efficiency ÷ active weights: ${hw.bw} GB/s × ${hw.eff} ÷ ${(m.a*q.bpw/8*1.05).toFixed(1)} GB${c.fit==='partial'?' × offload penalty':''}`,v:`${this.fmt(c.base)} tok/s`},
+      {n:'5',f:'Spread ±12% (thermals, batch, runtime)',v:`${this.fmt(c.lo)}–${this.fmt(c.hi)} tok/s`},
+      {n:'6',f:`Prefill ≈ ${hw.fam==='apple'?'4':'12'}× decode → ${ctx.toLocaleString()} ÷ ${Math.round(c.base*(hw.fam==='apple'?4:12)).toLocaleString()} tok/s + overhead`,v:`TTFT ${c.ttft<10?c.ttft.toFixed(1):Math.round(c.ttft)} s`}
+    ];
+    const wait=this.runCfg?this.runCfg.wait:1;
+    const frac=Math.min(1,s.prefillT/wait);
+    const simEl=this.runCfg?frac*this.runCfg.ttft:0;
+    const prefillStatus = frac<0.22 ? 'Loading weights' : frac<0.45 ? 'Allocating KV cache' : (c.fit==='partial'&&frac<0.6) ? 'Offloading layers to system RAM' : `Prefilling ${(this.runCfg?this.runCfg.tokIn:ctx).toLocaleString()} tokens`;
+    const segBtn=(active)=>`flex:1; padding:8px 4px; border-radius:8px; font-size:12.5px; cursor:pointer; font-family:'IBM Plex Mono',monospace; ${active?`background:${accent}; border:1px solid ${accent}; color:#18100d; font-weight:600`:'background:#171a21; border:1px solid #2a2f39; color:#aab1bd'}`;
+    const msgs=s.history.map(mm=>({
+      text:mm.text, meta:mm.meta||false,
+      wrapStyle: mm.role==='user'?'align-self:flex-end; max-width:560px':'align-self:flex-start; max-width:720px',
+      bubbleStyle: mm.role==='user'
+        ?"background:#1d2129; border:1px solid #2a2f39; border-radius:12px 12px 3px 12px; padding:12px 16px; font-size:13.5px; line-height:1.6; color:#d9dde4; white-space:pre-wrap"
+        :"font-family:'IBM Plex Mono',monospace; font-size:13.5px; line-height:1.75; color:#d9dde4; white-space:pre-wrap"
+    }));
+    return {
+      hwList:this.HW, modelList:this.MODELS,
+      hw:s.hw, model:s.model,
+      setHw:e=>this.setState({hw:e.target.value}),
+      setModel:e=>this.setState({model:e.target.value}),
+      quantBtns:this.QUANTS.map(qq=>({label:qq.label, pick:()=>this.setState({quant:qq.id}), style:segBtn(qq.id===s.quant)})),
+      quantNote:`≈ ${q.bpw} bits/weight · ${c.w.toFixed(1)} GB weights`,
+      fitLabel:fitLabels[c.fit],
+      fitChipStyle:`font-size:11px; font-weight:600; letter-spacing:0.06em; font-family:'IBM Plex Mono',monospace; color:${fc}; border:1px solid ${fc.replace(')',' / .45)').replace('oklch(','oklch(')}; border-radius:99px; padding:3px 9px`,
+      fitBarStyle:`height:100%; width:${pct}%; background:${fc}; border-radius:4px; transition:width .3s ease, background .3s ease; opacity:.85`,
+      fitNeed:`${c.total.toFixed(1)} GB needed`, fitHave:`${c.usable.toFixed(1)} GB usable`,
+      fitDetail, suggShow, suggLabel,
+      applySugg:()=>suggQ&&this.setState({quant:suggQ}),
+      statRange: c.fit==='no' ? '—' : `${this.fmt(c.lo)}–${this.fmt(c.hi)}`,
+      statTtft: c.fit==='no' ? '—' : (c.ttft<10?c.ttft.toFixed(2).replace(/0$/,''):Math.round(c.ttft))+' s',
+      confLabel:conf[0], confDotStyle:`width:8px; height:8px; border-radius:50%; background:${conf[1]}; display:inline-block`,
+      toggleSlow:()=>this.setState(x=>({slowEnd:!x.slowEnd})),
+      slowLabel: s.slowEnd?'Slow end: on':'Slow end: off',
+      slowBtnStyle:`background:${s.slowEnd?'oklch(0.75 0.15 25 / .15)':'none'}; border:1px solid ${s.slowEnd?accent:'#2a2f39'}; color:${s.slowEnd?'oklch(0.85 0.11 30)':'#8b93a1'}; border-radius:7px; padding:6px 12px; font-size:12.5px; cursor:pointer`,
+      showReplay: s.phase==='done',
+      replay:()=>this.replay(),
+      toggleBreakdown:()=>this.setState(x=>({breakdownOpen:!x.breakdownOpen})),
+      breakdownToggleLabel: s.breakdownOpen?'How we calculated this ▴':'How we calculated this ▾',
+      breakdownOpen:s.breakdownOpen, breakdown,
+      scrollRef:el=>{this._sc=el;},
+      emptyChat: s.history.length===0 && !busy,
+      emptyLine:'$ dryrun --simulate',
+      messages:msgs,
+      isPrefill:s.phase==='prefill',
+      spinner:this.SPIN[Math.floor(s.prefillT*10)%10],
+      prefillStatus,
+      prefillClock:`${simEl.toFixed(1)}s`,
+      compressNote: this.runCfg&&this.runCfg.compress&&s.phase==='prefill' ? `⏩ time-lapse — real wait ≈ ${this.runCfg.ttft<60?this.runCfg.ttft.toFixed(0)+' s':(this.runCfg.ttft/60).toFixed(1)+' min'}` : false,
+      isStream:s.phase==='stream',
+      liveTokLabel:`${this.fmt(s.liveTok)} tok/s`,
+      streamText:s.streamText,
+      wontRun:c.fit==='no' && !busy,
+      wontRunDetail:`${m.name} at ${q.label} needs ${c.total.toFixed(1)} GB — ${hw.name.split(' · ')[1]} has ${c.usable.toFixed(1)} GB usable. ${suggShow?'':'No quantization of this model fits; pick a smaller model or bigger memory.'}`,
+      preset:s.custom!==null?s.preset:s.preset,
+      setPreset:e=>this.setState({preset:+e.target.value,custom:null}),
+      presetBtns:this.PRESETS.map((p,i)=>({label:p.label,pick:()=>this.setState({preset:i,custom:null}),
+        style:`flex:1; padding:7px 4px; border-radius:7px; font-size:12px; cursor:pointer; ${s.custom===null&&i===s.preset?`background:oklch(0.75 0.15 25 / .12); border:1px solid oklch(0.75 0.15 25 / .5); color:oklch(0.85 0.11 30)`:'background:none; border:1px solid #242935; color:#8b93a1'}`})),
+      customChipStyle:`font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:${s.custom!==null?'oklch(0.85 0.11 30)':'#697180'}; flex-shrink:0`,
+      promptTokLabel:`${s.custom!==null?'custom · ':''}~${ctx.toLocaleString()} tok`,
+      promptText:s.custom!==null?s.custom:this.PRESETS[s.preset].text,
+      setCustom:e=>this.setState({custom:e.target.value}),
+      runOrStop:()=>busy?this.stop():this.run(),
+      runLabel: busy?'■ Stop':(c.fit==='no'?"Won't run":'▶ Run'),
+      runBtnStyle:`width:120px; border-radius:10px; font-size:14px; font-weight:600; cursor:${c.fit==='no'&&!busy?'default':'pointer'}; ${busy?'background:#1d2129; border:1px solid #2a2f39; color:#c7cdd6':c.fit==='no'?'background:none; border:1px dashed #3a4150; color:#565e6c':`background:${accent}; border:1px solid ${accent}; color:#18100d`}`
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+/* app shell: the document never scrolls (keeps mobile Safari's browser chrome from collapsing);
+   an inner container scrolls instead */
+html,body{margin:0;padding:0;background:var(--c-bg);color:var(--c-ink);font-family:'Instrument Sans',sans-serif;height:100%;overflow:hidden;transition:background-color .35s ease}
+/* document-level dark background (safe areas, overscroll) — a plain class so the [data-dark]
+   variable/transition rules stay scoped to the app root exactly like the original design */
+html.theme-dark,html.theme-dark body{background:#111114}
+/* hero mode scrolls the document itself so iOS Safari's native pull-to-refresh indicator appears;
+   conversation mode keeps the app shell (document locked, inner scroller) */
+html.doc-scroll,html.doc-scroll body{overflow-x:hidden;overflow-y:auto;height:auto;min-height:100%}
+#app{height:100%}
+/* app height lives in a class (not inline style) so the keyboard handler can override it with an
+   inline pixel height and restore it by clearing that inline value */
+.app-root{height:100%;height:100dvh}
+html.doc-scroll .app-root{height:auto}
+textarea::placeholder{font-weight:300;color:var(--c-ph)}
+.hero-title{font-size:38px}
+.hero-sub{font-size:16px}
+.hero-sub-br{display:none}
+.page-col{padding:0 24px}
+@media (max-width:640px){
+.hero-title{font-size:28px}
+.hero-sub{font-size:14px}
+.hero-sub-br{display:inline}
+.page-col{padding:0 16px}
+/* iOS Safari auto-zooms the page when focusing inputs with font-size < 16px */
+textarea{font-size:16px!important}
+}
+:root{--c-bg:#ffffff;--c-bg-subtle:#fafafa;--c-bg-muted:#f4f4f5;--c-border-faint:#f0f0f2;--c-border:#e4e4e7;--c-border-strong:#d4d4d8;--c-text-faint:#a1a1aa;--c-ph:#97979f;--c-text-muted:#71717a;--c-text-sec:#52525b;--c-text-strong:#3f3f46;--c-text:#27272a;--c-ink:#18181b;--c-warn-bg:#fdf6f5;--c-badge-b-bg:#eef2ff;--c-badge-b:#4f46e5}
+[data-dark="1"]{--c-bg:#111114;--c-bg-subtle:#1a1a1e;--c-bg-muted:#26262c;--c-border-faint:#1e1e23;--c-border:#32323a;--c-border-strong:#45454f;--c-text-faint:#6e6e79;--c-ph:#75757f;--c-text-muted:#93939e;--c-text-sec:#b3b3bd;--c-text-strong:#cbcbd3;--c-text:#dcdce2;--c-ink:#f2f2f5;--c-warn-bg:#2a1a17;--c-badge-b-bg:#20244a;--c-badge-b:#a5b4fc}
+*{box-sizing:border-box}
+[data-dark] *,[data-dark]{transition:background-color .35s ease, border-color .35s ease, color .35s ease}
+a{color:oklch(0.62 0.17 30)}a:hover{color:oklch(0.52 0.17 30)}
+select,textarea,input,button{font:inherit;color:inherit}
+textarea:focus,select:focus,button:focus{outline:none}
+::selection{background:oklch(0.62 0.17 30 / .2)}
+::-webkit-scrollbar{width:10px}
+::-webkit-scrollbar-thumb{background:var(--c-border);border-radius:5px}
+::-webkit-scrollbar-track{background:transparent}
+@keyframes blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+@keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes feelBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes feelShimmer{0%{background-position:130% 0}100%{background-position:-30% 0}}
+@keyframes feelBreathe{0%,100%{transform:scale(1); opacity:1}50%{transform:scale(1.06); opacity:.75}}
+@keyframes feelGradient{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+@keyframes feelSpark{0%,100%{opacity:0; transform:scale(.4) rotate(0deg)}45%,55%{opacity:1; transform:scale(1) rotate(15deg)}}
+
+/* hover utilities — the mockup's style-hover attributes; !important so they win over inline styles.
+   Scoped to hover-capable devices so touch screens don't get stuck hover states after a tap. */
+@media (hover:hover){
+.hv-ink:hover{border-color:var(--c-border-strong)!important;color:var(--c-ink)!important}
+.hv-border:hover{border-color:var(--c-border-strong)!important}
+.hv-bg:hover{background:var(--c-bg-muted)!important}
+.hv-accent:hover{background:oklch(0.62 0.17 30 / .06)!important}
+.hv-help:hover{border-color:var(--c-text-faint)!important;color:var(--c-text-sec)!important}
+.hv-text-ink:hover{color:var(--c-ink)!important}
+.hv-dash:hover{border-color:var(--c-text-faint)!important;color:var(--c-ink)!important}
+}
