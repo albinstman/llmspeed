@@ -24,6 +24,8 @@ interface St {
   lanes: LaneSt[]; racePrompt: string; shared: boolean; dark: boolean
   feelPhase: 'type' | 'hold' | 'erase'; feelN: number; feelT: number
   isMobile: boolean; cfgOpen: boolean; composerH: number
+  /** a run=1 share link was opened: render the conversation view immediately, run() fires shortly */
+  pendingShare: boolean
 }
 interface RunLane { hw: Hw; m: Model; q: Quant; c: CalcResult; norun: boolean; acc: number; i: number; done: boolean; streamStarted: boolean; liveTok: number; finishT: number }
 
@@ -34,13 +36,41 @@ type OptRow =
 const EMPTY_LANE: LaneSt = { phase: 'prefill', prefillT: 0, text: '', liveTok: 0, finishT: 0, winner: false }
 
 export class App extends Component<{}, St> {
-  state: St = {
-    cfgs: [{ hw: 'rtx4090', model: 'llama31-8b', quant: 'q4' }], preset: 0, custom: null, phase: 'idle',
-    streamText: '', liveTok: 0, prefillT: 0, breakdownOpen: false, history: [],
-    dd: null, tip: null, hwSort: 'pop', modelSort: 'pop', lanes: [], racePrompt: '', shared: false, dark: false,
-    feelPhase: 'type', feelN: 0, feelT: 0,
-    isMobile: typeof matchMedia !== 'undefined' && matchMedia('(max-width:640px)').matches, cfgOpen: false, composerH: 140,
-  }
+  state: St = (() => {
+    const base: St = {
+      cfgs: [{ hw: 'rtx4090', model: 'llama31-8b', quant: 'q4' }], preset: 0, custom: null, phase: 'idle',
+      streamText: '', liveTok: 0, prefillT: 0, breakdownOpen: false, history: [],
+      dd: null, tip: null, hwSort: 'pop', modelSort: 'pop', lanes: [], racePrompt: '', shared: false, dark: false,
+      feelPhase: 'type', feelN: 0, feelT: 0,
+      isMobile: typeof matchMedia !== 'undefined' && matchMedia('(max-width:640px)').matches, cfgOpen: false, composerH: 140,
+      pendingShare: false,
+    }
+    // share links are applied before the first render so the hero never flashes
+    try {
+      const qs = new URLSearchParams(location.search)
+      if (qs.has('hw') || qs.has('model')) {
+        const hws = (qs.get('hw') || '').split(','), models = (qs.get('model') || '').split(','), quants = (qs.get('quant') || '').split(',')
+        const n = Math.min(2, Math.max(hws.length, models.length, quants.length))
+        const cfgs: Cfg[] = []
+        for (let i = 0; i < n; i++) {
+          const cfg = { hw: hws[i] || hws[0], model: models[i] || models[0], quant: quants[i] || quants[0] }
+          if (HW.some(h => h.id === cfg.hw) && MODELS.some(m => m.id === cfg.model) && QUANTS.some(x => x.id === cfg.quant)) cfgs.push(cfg)
+        }
+        if (cfgs.length) base.cfgs = cfgs
+        const p = qs.get('preset')
+        if (p !== null && PRESETS[+p]) base.preset = +p
+        const t = qs.get('prompt')
+        if (t) base.custom = t.slice(0, 2000)
+        if (qs.get('run') === '1') {
+          base.pendingShare = true
+          const text = base.custom !== null ? base.custom : PRESETS[base.preset].text
+          if (base.cfgs.length === 1) base.history = [{ role: 'user', text }]
+          else base.racePrompt = text
+        }
+      }
+    } catch (e) { }
+    return base
+  })()
 
   timer?: ReturnType<typeof setInterval>
   feelTimer?: ReturnType<typeof setInterval>
@@ -75,7 +105,7 @@ export class App extends Component<{}, St> {
     const s = this.state
     const busy = s.phase === 'running'
     const raceActive = s.cfgs.length > 1 && (busy || s.phase === 'done') && s.lanes.length > 1
-    return !raceActive && s.history.length === 0 && !busy
+    return !raceActive && s.history.length === 0 && !busy && !s.pendingShare
   }
   // a plain class (NOT data-dark: that would pull html/body into the [data-dark] transition rules
   // and cause chained/laggy fades) themes the document — safe areas and Safari's toolbar tint
@@ -160,26 +190,15 @@ export class App extends Component<{}, St> {
         return n > 0 ? { feelN: n - 1 } : { feelPhase: 'type' as const, feelN: 0 }
       })
     }, 260)
-    try {
-      const qs = new URLSearchParams(location.search)
-      if (qs.has('hw') || qs.has('model')) {
-        const hws = (qs.get('hw') || '').split(','), models = (qs.get('model') || '').split(','), quants = (qs.get('quant') || '').split(',')
-        const n = Math.min(2, Math.max(hws.length, models.length, quants.length))
-        const cfgs: Cfg[] = []
-        for (let i = 0; i < n; i++) {
-          const cfg = { hw: hws[i] || hws[0], model: models[i] || models[0], quant: quants[i] || quants[0] }
-          if (HW.some(h => h.id === cfg.hw) && MODELS.some(m => m.id === cfg.model) && QUANTS.some(x => x.id === cfg.quant)) cfgs.push(cfg)
-        }
-        const patch: Partial<St> = {}
-        if (cfgs.length) patch.cfgs = cfgs
-        const p = qs.get('preset')
-        if (p !== null && PRESETS[+p]) patch.preset = +p
-        const t = qs.get('prompt')
-        if (t) patch.custom = t.slice(0, 2000)
-        this.setState(patch, () => { if (qs.get('run') === '1') setTimeout(() => this.run(), 600) })
-        return
-      }
-    } catch (e) { }
+    if (this.state.pendingShare) {
+      // question bubble animates in first, then the simulation starts
+      setTimeout(() => {
+        if (this.state.cfgs.length === 1) this._replayHistory = [] // run() adds the user message itself
+        this.setState({ pendingShare: false })
+        this.run()
+      }, 900)
+      return
+    }
     // legacy share links: base64 config in the #s= hash
     try {
       const hm = location.hash.match(/s=([^&]+)/)
@@ -475,8 +494,8 @@ export class App extends Component<{}, St> {
         if (ac.fit === 'fits') { suggShow = true; suggQ = alt.id; suggLabel = `Switch to ${alt.label} — fits, ~${fmt(ac.lo)}–${fmt(ac.hi)} tok/s`; break }
       }
     }
-    const raceActive = compare && (busy || s.phase === 'done') && s.lanes.length > 1
-    const heroMode = !raceActive && s.history.length === 0 && !busy
+    const raceActive = compare && (((busy || s.phase === 'done') && s.lanes.length > 1) || s.pendingShare)
+    const heroMode = !raceActive && s.history.length === 0 && !busy && !s.pendingShare
     const chatMode = !compare && !heroMode
     // mobile config collapse only applies once in a conversation; the hero keeps inline chips
     const collapse = s.isMobile && !heroMode
@@ -598,7 +617,7 @@ export class App extends Component<{}, St> {
       scrollRef: (el: HTMLElement | null) => { this._sc = el },
       messages: s.history.map(mm => ({
         text: mm.text, meta: mm.meta || false as string | false,
-        wrapStyle: mm.role === 'user' ? 'align-self:flex-end; max-width:540px' : 'align-self:flex-start; max-width:680px',
+        wrapStyle: mm.role === 'user' ? 'align-self:flex-end; max-width:540px; animation:bubbleIn .6s cubic-bezier(.22,.61,.36,1) both' : 'align-self:flex-start; max-width:680px',
         bubbleStyle: mm.role === 'user'
           ? 'background:var(--c-bg-muted); border-radius:16px 16px 4px 16px; padding:12px 16px; font-size:14.5px; line-height:23px; color:var(--c-text); white-space:pre-wrap'
           : 'font-size:15px; line-height:26px; color:var(--c-text); white-space:pre-wrap',
@@ -680,7 +699,7 @@ export class App extends Component<{}, St> {
           )}
           {v.raceMode && (
             <div style={`flex:1; padding:28px 4px ${v.scrollPadBottom}px; display:flex; flex-direction:column; gap:18px`}>
-              <div style="align-self:flex-end; max-width:540px; background:var(--c-bg-muted); border-radius:16px 16px 4px 16px; padding:12px 16px; font-size:14.5px; line-height:23px; color:var(--c-text); white-space:pre-wrap">{v.racePrompt}</div>
+              <div style="align-self:flex-end; max-width:540px; background:var(--c-bg-muted); border-radius:16px 16px 4px 16px; padding:12px 16px; font-size:14.5px; line-height:23px; color:var(--c-text); white-space:pre-wrap; animation:bubbleIn .6s cubic-bezier(.22,.61,.36,1) both">{v.racePrompt}</div>
               <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:16px; align-items:start">
                 {v.raceLanes.map((L, i) => (
                   <div key={i} style={L.cardStyle}>

@@ -37,6 +37,7 @@ textarea:focus,select:focus,button:focus{outline:none}
 ::-webkit-scrollbar-thumb{background:var(--c-border);border-radius:5px}
 ::-webkit-scrollbar-track{background:transparent}
 @keyframes blink{0%,55%{opacity:1}56%,100%{opacity:0}}
+@keyframes bubbleIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
 @keyframes feelBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
 @keyframes feelShimmer{0%{background-position:130% 0}100%{background-position:-30% 0}}
