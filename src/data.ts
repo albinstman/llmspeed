@@ -1,37 +1,118 @@
-// Placeholder dataset ported from the design mockup.
-// TODO: replace with curated JSON assets (hardware, models, benchmarks) once sourcing is decided.
+// Typed loader for data/app-data.json — the single build artifact the pipeline emits
+// (see docs/data-contract.md). The checked-in JSON is a hand-seeded placeholder with an
+// empty `combos` map: until the pipeline produces real per-combo ranges, every prediction
+// falls back to the coefficient formulas in calc.ts and shows as "projected".
+
+import raw from '../data/app-data.json'
+
+export type Vendor = 'nvidia' | 'amd' | 'apple' | 'intel' | 'cpu'
+export type Backend = 'cuda' | 'metal' | 'rocm' | 'vulkan' | 'cpu'
+export type Tier = 'measured' | 'derived' | 'projected' | 'wont_run'
 
 export interface Hw {
   id: string
   name: string
-  /** memory capacity in GB (VRAM, or unified memory on Apple) */
-  vram: number
-  /** memory bandwidth in GB/s */
-  bw: number
-  fam: 'nvidia' | 'apple' | 'amd' | 'dc'
-  /** effective fraction of peak bandwidth reached during decode */
-  eff: number
-  /** 1 = we have real measurements for this device */
-  meas?: 1
-  pop: number
+  vendor: Vendor
+  backend: Backend
+  /** memory capacity in GB (VRAM, or unified memory on Apple/Strix Halo) */
+  vram_gb: number
+  bandwidth_gbs: number
+  tflops_fp16: number
+  form_factor: 'desktop' | 'laptop' | 'mini' | 'server'
+  status: 'released' | 'announced'
+  popularity_rank: number
 }
 
 export interface Model {
   id: string
   name: string
-  /** total params, billions */
-  p: number
-  /** active params per token, billions (differs from p for MoE) */
-  a: number
-  pop: number
+  family: string
+  total_params_b: number
+  /** active params per token — < total for MoE; drives speed, total drives memory */
+  active_params_b: number
+  /** fp16 KV cache size at 8,192 context tokens */
+  kv_gb_per_8k: number
+  quants: Record<string, { file_gb: number }>
+  context_max: number
+  popularity_rank: number
 }
 
 export interface Quant {
   id: string
   label: string
-  /** bits per weight */
-  bpw: number
 }
+
+export interface Coeffs {
+  decode_bw_eff: number
+  prefill_flops_eff: number
+  /** multiplicative throughput derate per 8k tokens of context depth */
+  ctx_derate_per_8k: number
+}
+
+export interface ComboPred {
+  tier: Tier
+  /** [lo, hi] tok/s at near-zero context; null for wont_run */
+  gen_tps: [number, number] | null
+  /** [lo, hi] tok/s per prompt-length preset (same order as prompt_presets); null if unmodeled */
+  prefill_tps: [number, number][] | null
+}
+
+interface AppData {
+  prompt_presets: number[]
+  hardware: Hw[]
+  models: Model[]
+  coefficients: Partial<Record<Backend, Coeffs>>
+  /** keyed "hardware_id|model_id|quant" */
+  combos: Record<string, ComboPred>
+}
+
+const DATA = raw as unknown as AppData
+
+export const HW: Hw[] = [...DATA.hardware].sort((a, b) => a.popularity_rank - b.popularity_rank)
+export const MODELS: Model[] = [...DATA.models].sort((a, b) => a.popularity_rank - b.popularity_rank)
+export const PROMPT_PRESET_TOKS: number[] = DATA.prompt_presets
+
+export function quantOf(id: string): Quant {
+  return { id, label: id.toUpperCase() }
+}
+
+/** quants this model actually has files for, smallest first */
+export function quantsFor(m: Model): Quant[] {
+  return Object.keys(m.quants)
+    .sort((a, b) => m.quants[a].file_gb - m.quants[b].file_gb)
+    .map(quantOf)
+}
+
+const FALLBACK_COEFFS: Coeffs = { decode_bw_eff: 0.5, prefill_flops_eff: 0.25, ctx_derate_per_8k: 0.92 }
+
+export function coeffs(backend: Backend): Coeffs {
+  return DATA.coefficients[backend] ?? FALLBACK_COEFFS
+}
+
+export function combo(hwId: string, modelId: string, quantId: string): ComboPred | undefined {
+  return DATA.combos[`${hwId}|${modelId}|${quantId}`]
+}
+
+// Share URLs minted before the pipeline-style catalog ids existed. Catalog ids are
+// permanent per the data contract, so this map only ever grows.
+const LEGACY_HW: Record<string, string> = {
+  rtx3060: 'rtx-3060', rtx4070: 'rtx-4070', rtx4070ts: 'rtx-4070-ti-super',
+  rtx4090: 'rtx-4090', rtx5090: 'rtx-5090',
+  m2pro: 'm2-pro-16gb', m4pro: 'm4-pro-24gb', m3max: 'm3-max-48gb', m4max: 'm4-max-128gb',
+  rx7900xt: 'rx-7900-xt', rx7900xtx: 'rx-7900-xtx',
+  a100: 'a100-80gb', h100: 'h100-80gb',
+}
+const LEGACY_MODEL: Record<string, string> = {
+  'llama31-8b': 'llama-3.1-8b', 'llama33-70b': 'llama-3.3-70b',
+  'qwen25-7b': 'qwen-2.5-7b', 'qwen25-32b': 'qwen-2.5-32b', 'qwen25-72b': 'qwen-2.5-72b',
+  mistral7b: 'mistral-7b', mixtral: 'mixtral-8x7b',
+  'r1-14b': 'deepseek-r1-14b', 'r1-32b': 'deepseek-r1-32b', phi4: 'phi-4-14b',
+}
+const LEGACY_QUANT: Record<string, string> = { q4: 'q4_k_m', q8: 'q8_0', f16: 'fp16' }
+
+export const canonHw = (id: string) => LEGACY_HW[id] ?? id
+export const canonModel = (id: string) => LEGACY_MODEL[id] ?? id
+export const canonQuant = (id: string) => LEGACY_QUANT[id] ?? id
 
 export interface Preset {
   label: string
@@ -39,47 +120,16 @@ export interface Preset {
   text: string
 }
 
-export const HW: Hw[] = [
-  { id: 'rtx3060', name: 'RTX 3060 12GB', vram: 12, bw: 360, fam: 'nvidia', eff: 0.55, meas: 1, pop: 1 },
-  { id: 'rtx4070', name: 'RTX 4070 12GB', vram: 12, bw: 504, fam: 'nvidia', eff: 0.55, pop: 3 },
-  { id: 'rtx4070ts', name: 'RTX 4070 Ti Super 16GB', vram: 16, bw: 672, fam: 'nvidia', eff: 0.55, pop: 6 },
-  { id: 'rtx4090', name: 'RTX 4090 24GB', vram: 24, bw: 1008, fam: 'nvidia', eff: 0.55, meas: 1, pop: 2 },
-  { id: 'rtx5090', name: 'RTX 5090 32GB', vram: 32, bw: 1792, fam: 'nvidia', eff: 0.5, meas: 1, pop: 8 },
-  { id: 'm2pro', name: 'MacBook M2 Pro 16GB', vram: 16, bw: 200, fam: 'apple', eff: 0.7, pop: 5 },
-  { id: 'm4pro', name: 'MacBook M4 Pro 24GB', vram: 24, bw: 273, fam: 'apple', eff: 0.7, pop: 4 },
-  { id: 'm3max', name: 'MacBook M3 Max 48GB', vram: 48, bw: 400, fam: 'apple', eff: 0.7, meas: 1, pop: 9 },
-  { id: 'm4max', name: 'Mac Studio M4 Max 128GB', vram: 128, bw: 546, fam: 'apple', eff: 0.7, pop: 10 },
-  { id: 'rx7900xt', name: 'RX 7900 XT 20GB', vram: 20, bw: 800, fam: 'amd', eff: 0.42, pop: 11 },
-  { id: 'rx7900xtx', name: 'RX 7900 XTX 24GB', vram: 24, bw: 960, fam: 'amd', eff: 0.42, pop: 7 },
-  { id: 'a100', name: 'A100 80GB (cloud)', vram: 80, bw: 2039, fam: 'dc', eff: 0.6, pop: 12 },
-  { id: 'h100', name: 'H100 80GB (cloud)', vram: 80, bw: 3350, fam: 'dc', eff: 0.6, pop: 13 },
+// Prompt texts are pure UI; the token depths come from app-data.json so the
+// pipeline's prefill presets and the picker always agree.
+const PRESET_UI: { label: string; text: string }[] = [
+  { label: 'Short chat', text: "What's the practical difference between RAM and VRAM for running local models? Keep it brief." },
+  { label: 'Email draft', text: "Draft a polite email to my landlord about the broken heating. Notes: reported it twice already (Oct 12, Oct 19), no response. Lease says repairs within 14 days. I want a firm but friendly tone, mention I'll escalate to the tenancy board if not fixed by end of month. Sign as Sam." },
+  { label: 'Code file', text: "Review this file for bugs and suggest fixes:\n\nfunction debounce(fn, wait) {\n  let t;\n  return (...args) => {\n    clearTimeout(t);\n    t = setTimeout(() => fn(args), wait);\n  };\n}\n\nasync function fetchUsers(ids) {\n  const out = [];\n  ids.forEach(async id => {\n    const r = await fetch('/api/users/' + id);\n    out.push(r.json());\n  });\n  return out;\n}\n\n… [file continues — ~1,800 tokens total]" },
+  { label: '20-page doc', text: "Summarize the key obligations, deadlines, and termination clauses in this services agreement:\n\nMASTER SERVICES AGREEMENT — This Agreement is entered into as of the Effective Date by and between the Client and the Provider. 1. SERVICES. Provider shall perform the services described in each Statement of Work…\n\n… [document continues — ~12,500 tokens total]" },
 ]
 
-export const MODELS: Model[] = [
-  { id: 'llama31-8b', name: 'Llama 3.1 8B', p: 8, a: 8, pop: 1 },
-  { id: 'llama33-70b', name: 'Llama 3.3 70B', p: 70, a: 70, pop: 8 },
-  { id: 'qwen25-7b', name: 'Qwen 2.5 7B', p: 7.6, a: 7.6, pop: 3 },
-  { id: 'qwen25-32b', name: 'Qwen 2.5 32B', p: 32, a: 32, pop: 6 },
-  { id: 'qwen25-72b', name: 'Qwen 2.5 72B', p: 72, a: 72, pop: 9 },
-  { id: 'mistral7b', name: 'Mistral 7B', p: 7.2, a: 7.2, pop: 2 },
-  { id: 'mixtral', name: 'Mixtral 8×7B', p: 46.7, a: 12.9, pop: 10 },
-  { id: 'r1-14b', name: 'DeepSeek R1 Distill 14B', p: 14.8, a: 14.8, pop: 5 },
-  { id: 'r1-32b', name: 'DeepSeek R1 Distill 32B', p: 32.8, a: 32.8, pop: 7 },
-  { id: 'phi4', name: 'Phi-4 14B', p: 14.7, a: 14.7, pop: 4 },
-]
-
-export const QUANTS: Quant[] = [
-  { id: 'q4', label: 'Q4_K_M', bpw: 4.6 },
-  { id: 'q8', label: 'Q8_0', bpw: 8.5 },
-  { id: 'f16', label: 'FP16', bpw: 16 },
-]
-
-export const PRESETS: Preset[] = [
-  { label: 'Short chat', tok: 42, text: "What's the practical difference between RAM and VRAM for running local models? Keep it brief." },
-  { label: 'Email draft', tok: 290, text: "Draft a polite email to my landlord about the broken heating. Notes: reported it twice already (Oct 12, Oct 19), no response. Lease says repairs within 14 days. I want a firm but friendly tone, mention I'll escalate to the tenancy board if not fixed by end of month. Sign as Sam." },
-  { label: 'Code file', tok: 1800, text: "Review this file for bugs and suggest fixes:\n\nfunction debounce(fn, wait) {\n  let t;\n  return (...args) => {\n    clearTimeout(t);\n    t = setTimeout(() => fn(args), wait);\n  };\n}\n\nasync function fetchUsers(ids) {\n  const out = [];\n  ids.forEach(async id => {\n    const r = await fetch('/api/users/' + id);\n    out.push(r.json());\n  });\n  return out;\n}\n\n… [file continues — ~1,800 tokens total]" },
-  { label: '20-page doc', tok: 12500, text: "Summarize the key obligations, deadlines, and termination clauses in this services agreement:\n\nMASTER SERVICES AGREEMENT — This Agreement is entered into as of the Effective Date by and between the Client and the Provider. 1. SERVICES. Provider shall perform the services described in each Statement of Work…\n\n… [document continues — ~12,500 tokens total]" },
-]
+export const PRESETS: Preset[] = PRESET_UI.map((p, i) => ({ ...p, tok: PROMPT_PRESET_TOKS[i] ?? [42, 290, 1800, 12500][i] }))
 
 export const RESP: string[] = [
   "RAM is your system's general-purpose working memory — the CPU uses it for everything. VRAM is memory that lives on the graphics card, wired directly to the GPU with much higher bandwidth. For local models that distinction is the whole game: the model's weights have to be read once per generated token, so whichever memory holds the weights sets your speed. Weights in VRAM stream at hundreds of GB/s; spill into system RAM and you drop to a tenth of that. Practical rule: buy enough VRAM to hold the model you actually want to run, at the quantization you can tolerate. Speed is mostly memory bandwidth, capacity decides what fits.",

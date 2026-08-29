@@ -1,4 +1,8 @@
 node_modules/
 dist/
-.claude/settings.local.json
+.claude
+data/*
+!data/app-data.json
+docs/
+scripts/
 .DS_Store

@@ -1,5 +1,5 @@
 import { Component, type ComponentChild } from 'preact'
-import { HW, MODELS, QUANTS, PRESETS, RESP, SPIN, type Hw, type Model, type Quant } from './data'
+import { HW, MODELS, PRESETS, RESP, SPIN, quantOf, quantsFor, canonHw, canonModel, canonQuant, type Hw, type Model, type Quant } from './data'
 import { calc, fmt, type CalcResult, type Fit } from './calc'
 
 // Design knobs — values match the mockup's exported defaults (Tokens Simulator v3).
@@ -38,7 +38,7 @@ const EMPTY_LANE: LaneSt = { phase: 'prefill', prefillT: 0, text: '', liveTok: 0
 export class App extends Component<{}, St> {
   state: St = (() => {
     const base: St = {
-      cfgs: [{ hw: 'rtx4090', model: 'llama31-8b', quant: 'q4' }], preset: 0, custom: null, phase: 'idle',
+      cfgs: [{ hw: 'rtx-4090', model: 'llama-3.1-8b', quant: 'q4_k_m' }], preset: 0, custom: null, phase: 'idle',
       streamText: '', liveTok: 0, prefillT: 0, breakdownOpen: false, history: [],
       dd: null, tip: null, hwSort: 'pop', modelSort: 'pop', lanes: [], racePrompt: '', shared: false, dark: false,
       feelPhase: 'type', feelN: 0, feelT: 0,
@@ -49,12 +49,13 @@ export class App extends Component<{}, St> {
     try {
       const qs = new URLSearchParams(location.search)
       if (qs.has('hw') || qs.has('model')) {
-        const hws = (qs.get('hw') || '').split(','), models = (qs.get('model') || '').split(','), quants = (qs.get('quant') || '').split(',')
+        const hws = (qs.get('hw') || '').split(',').map(canonHw), models = (qs.get('model') || '').split(',').map(canonModel), quants = (qs.get('quant') || '').split(',').map(canonQuant)
         const n = Math.min(2, Math.max(hws.length, models.length, quants.length))
         const cfgs: Cfg[] = []
         for (let i = 0; i < n; i++) {
           const cfg = { hw: hws[i] || hws[0], model: models[i] || models[0], quant: quants[i] || quants[0] }
-          if (HW.some(h => h.id === cfg.hw) && MODELS.some(m => m.id === cfg.model) && QUANTS.some(x => x.id === cfg.quant)) cfgs.push(cfg)
+          const cm = MODELS.find(m => m.id === cfg.model)
+          if (HW.some(h => h.id === cfg.hw) && cm && cm.quants[cfg.quant]) cfgs.push(cfg)
         }
         if (cfgs.length) base.cfgs = cfgs
         const p = qs.get('preset')
@@ -129,7 +130,7 @@ export class App extends Component<{}, St> {
   }
 
   resolve(cfg: Cfg) {
-    return { hw: HW.find(h => h.id === cfg.hw)!, m: MODELS.find(m => m.id === cfg.model)!, q: QUANTS.find(q => q.id === cfg.quant)! }
+    return { hw: HW.find(h => h.id === cfg.hw)!, m: MODELS.find(m => m.id === cfg.model)!, q: quantOf(cfg.quant) }
   }
   promptTokens() {
     const s = this.state
@@ -206,7 +207,10 @@ export class App extends Component<{}, St> {
         const d = JSON.parse(atob(decodeURIComponent(hm[1])))
         const patch: Partial<St> = {}
         if (Array.isArray(d.c) && d.c.length) {
-          const cf = (d.c as Cfg[]).filter(x => HW.some(h => h.id === x.hw) && MODELS.some(m => m.id === x.model) && QUANTS.some(q => q.id === x.quant)).slice(0, 2)
+          const cf = (d.c as Cfg[])
+            .map(x => ({ hw: canonHw(x.hw), model: canonModel(x.model), quant: canonQuant(x.quant) }))
+            .filter(x => { const cm = MODELS.find(m => m.id === x.model); return HW.some(h => h.id === x.hw) && cm && cm.quants[x.quant] })
+            .slice(0, 2)
           if (cf.length) patch.cfgs = cf
         }
         if (typeof d.p === 'number' && PRESETS[d.p]) patch.preset = d.p
@@ -383,7 +387,16 @@ export class App extends Component<{}, St> {
     const s = this.state, cfg = s.cfgs[i], { hw, m, q } = this.resolve(cfg), ctx = this.promptTokens()
     const c = calc(hw, m, q, ctx)
     const compare = this.isCompare()
-    const setCfg = (patch: Partial<Cfg>) => this.setState(x => ({ cfgs: x.cfgs.map((cc, j) => j === i ? { ...cc, ...patch } : cc), dd: null }))
+    const setCfg = (patch: Partial<Cfg>) => this.setState(x => ({
+      cfgs: x.cfgs.map((cc, j) => {
+        if (j !== i) return cc
+        const next = { ...cc, ...patch }
+        // a newly picked model may lack the selected quant — fall back to its smallest
+        const nm = MODELS.find(mm => mm.id === next.model)!
+        if (!nm.quants[next.quant]) next.quant = quantsFor(nm)[0].id
+        return next
+      }), dd: null,
+    }))
     const dd = (k: string) => k + i
     const fitColors: Record<Fit, string> = { fits: 'oklch(0.55 0.15 155)', partial: 'oklch(0.68 0.13 85)', no: 'oklch(0.55 0.19 25)' }
     const fitLabels: Record<Fit, string> = { fits: `Fits in ${c.usable.toFixed(0)} GB`, partial: 'Partial offload', no: "Won't run" }
@@ -409,15 +422,15 @@ export class App extends Component<{}, St> {
         style: sortBtn(s.modelSort === id),
       })),
       hwOpts: this.groupOpts(
-        [...HW].sort((a, b) => s.hwSort === 'ram' ? b.vram - a.vram || a.pop - b.pop : a.pop - b.pop),
+        [...HW].sort((a, b) => s.hwSort === 'ram' ? b.vram_gb - a.vram_gb || a.popularity_rank - b.popularity_rank : a.popularity_rank - b.popularity_rank),
         h => calc(h, m, q, ctx).fit,
-        h => ({ name: h.name, meta: `${h.vram} GB`, sel: h.id === cfg.hw, pick: () => setCfg({ hw: h.id }) })),
+        h => ({ name: h.name, meta: `${h.vram_gb} GB${h.status === 'announced' ? ' · announced' : ''}`, sel: h.id === cfg.hw, pick: () => setCfg({ hw: h.id }) })),
       modelOpts: this.groupOpts(
-        [...MODELS].sort((a, b) => s.modelSort === 'size' ? a.p - b.p || a.pop - b.pop : a.pop - b.pop),
-        mm => calc(hw, mm, q, ctx).fit,
-        mm => ({ name: mm.name, meta: `${mm.p} B`, sel: mm.id === cfg.model, pick: () => setCfg({ model: mm.id }) })),
-      quantOpts: QUANTS.map(qq => ({
-        name: qq.label, meta: qq.id === 'q4' ? 'small · fast' : qq.id === 'q8' ? 'balanced' : 'full quality',
+        [...MODELS].sort((a, b) => s.modelSort === 'size' ? a.total_params_b - b.total_params_b || a.popularity_rank - b.popularity_rank : a.popularity_rank - b.popularity_rank),
+        mm => calc(hw, mm, quantOf(mm.quants[q.id] ? q.id : quantsFor(mm)[0].id), ctx).fit,
+        mm => ({ name: mm.name, meta: `${mm.total_params_b} B`, sel: mm.id === cfg.model, pick: () => setCfg({ model: mm.id }) })),
+      quantOpts: quantsFor(m).map(qq => ({
+        name: qq.label, meta: qq.id === 'q4_k_m' ? 'small · fast' : qq.id === 'q8_0' ? 'balanced' : qq.id === 'fp16' ? 'full quality' : `${m.quants[qq.id].file_gb.toFixed(1)} GB`,
         pick: () => setCfg({ quant: qq.id }),
         style: `display:flex; align-items:center; justify-content:space-between; gap:12px; width:100%; text-align:left; border:none; background:${qq.id === cfg.quant ? 'var(--c-bg-muted)' : 'none'}; border-radius:9px; padding:8px 10px; font-size:13px; cursor:pointer; color:var(--c-text)`,
       })),
@@ -456,7 +469,7 @@ export class App extends Component<{}, St> {
     const c0 = rows[0]._c
     const busy = s.phase === 'running'
     const accent = 'oklch(0.62 0.17 30)'
-    const confMap: Record<string, [string, string]> = { measured: ['Measured', 'oklch(0.55 0.15 155)'], derived: ['Derived', 'oklch(0.68 0.13 85)'], estimated: ['Estimated', 'oklch(0.66 0.16 55)'] }
+    const confMap: Record<string, [string, string]> = { measured: ['Measured', 'oklch(0.55 0.15 155)'], derived: ['Derived', 'oklch(0.68 0.13 85)'], projected: ['Projected', 'oklch(0.66 0.16 55)'] }
     const statRows = rows.map((r, i) => {
       const c = r._c, conf = c.conf ? confMap[c.conf] : ['—', 'var(--c-border-strong)']
       return {
@@ -471,25 +484,28 @@ export class App extends Component<{}, St> {
     const mkRows = (r: ReturnType<App['cfgRow']>) => {
       const c = r._c, m = r._m, hw = r._hw, q = r._q
       return c.fit === 'no' ? [
-        { n: '1', f: `Weights: ${m.p} B params × ${q.bpw} bpw ÷ 8 × 1.05 overhead`, v: `${c.w.toFixed(1)} GB` },
-        { n: '2', f: `KV cache @ ${ctx.toLocaleString()} ctx tokens`, v: `${c.kv.toFixed(1)} GB` },
-        { n: '3', f: `Total vs usable memory (${hw.fam === 'apple' ? '75% of unified' : '93% of VRAM'})`, v: `${c.total.toFixed(1)} / ${c.usable.toFixed(1)} GB` },
+        { n: '1', f: `Weights: ${m.total_params_b} B params @ ${q.label} (file size)`, v: `${c.w.toFixed(1)} GB` },
+        { n: '2', f: `KV cache @ ${ctx.toLocaleString()} ctx tokens (${m.kv_gb_per_8k} GB per 8k)`, v: `${c.kv.toFixed(1)} GB` },
+        { n: '3', f: `Total vs usable memory (${hw.vendor === 'apple' ? '75% of unified' : '93% of VRAM'})`, v: `${c.total.toFixed(1)} / ${c.usable.toFixed(1)} GB` },
         { n: '4', f: 'Result', v: "won't run" },
       ] : [
-        { n: '1', f: `Weights: ${m.p} B params × ${q.bpw} bpw ÷ 8 × 1.05 overhead`, v: `${c.w.toFixed(1)} GB` },
-        { n: '2', f: `KV cache @ ${ctx.toLocaleString()} ctx tokens`, v: `${c.kv.toFixed(1)} GB` },
+        { n: '1', f: `Weights: ${m.total_params_b} B params @ ${q.label} (file size)`, v: `${c.w.toFixed(1)} GB` },
+        { n: '2', f: `KV cache @ ${ctx.toLocaleString()} ctx tokens (${m.kv_gb_per_8k} GB per 8k)`, v: `${c.kv.toFixed(1)} GB` },
         { n: '3', f: `Fit: ${c.total.toFixed(1)} GB needed vs ${c.usable.toFixed(1)} GB usable`, v: c.fit === 'fits' ? 'fits' : 'partial offload' },
-        { n: '4', f: `Decode ≈ bandwidth × efficiency ÷ active weights: ${hw.bw} GB/s × ${hw.eff} ÷ ${(m.a * q.bpw / 8 * 1.05).toFixed(1)} GB${c.fit === 'partial' ? ' × offload penalty' : ''}`, v: `${fmt(c.base)} tok/s` },
-        { n: '5', f: 'Spread ±12% (thermals, batch, runtime)', v: `${fmt(c.lo)}–${fmt(c.hi)} tok/s` },
-        { n: '6', f: `Prefill ≈ ${hw.fam === 'apple' ? '4' : '12'}× decode → ${ctx.toLocaleString()} ÷ ${Math.round(c.base * (hw.fam === 'apple' ? 4 : 12)).toLocaleString()} tok/s + overhead`, v: `TTFT ${c.ttft < 10 ? c.ttft.toFixed(1) : Math.round(c.ttft)} s` },
+        { n: '4', f: c.fromCombo
+          ? `Decode: benchmark range for this combo × context derating${c.fit === 'partial' ? ' × offload penalty' : ''}`
+          : `Decode ≈ bandwidth × efficiency ÷ active weights: ${hw.bandwidth_gbs} GB/s × ${c.eff} ÷ ${c.aw.toFixed(1)} GB${c.fit === 'partial' ? ' × offload penalty' : ''}`, v: `${fmt(c.base)} tok/s` },
+        { n: '5', f: c.fromCombo ? 'Spread: holdout-validated interval' : 'Spread ±15% (engine, thermals, runtime)', v: `${fmt(c.lo)}–${fmt(c.hi)} tok/s` },
+        { n: '6', f: `Prefill ≈ ${Math.round(c.pre).toLocaleString()} tok/s → ${ctx.toLocaleString()} ÷ that + overhead`, v: `TTFT ${c.ttft < 10 ? c.ttft.toFixed(1) : Math.round(c.ttft)} s` },
       ]
     }
     const breakdownSecs = rows.map((r, i) => ({ showLabel: compare, label: `${i ? 'B' : 'A'} — ${r._hw.name} · ${r._m.name} · ${r._q.label}`, rows: mkRows(r) }))
     let suggShow = false, suggLabel = '', suggQ: string | null = null
     if (!compare && c0.fit !== 'fits') {
       const { hw, m, q } = this.resolve(s.cfgs[0])
-      for (const alt of QUANTS) {
-        if (alt.bpw >= q.bpw) continue
+      const curGb = m.quants[q.id] ? m.quants[q.id].file_gb : Infinity
+      for (const alt of quantsFor(m)) {
+        if (m.quants[alt.id].file_gb >= curGb) continue
         const ac = calc(hw, m, alt, ctx)
         if (ac.fit === 'fits') { suggShow = true; suggQ = alt.id; suggLabel = `Switch to ${alt.label} — fits, ~${fmt(ac.lo)}–${fmt(ac.hi)} tok/s`; break }
       }
@@ -592,7 +608,7 @@ export class App extends Component<{}, St> {
         if (v === 'ink-solid') return `${base}; background:var(--c-ink); border:1px solid var(--c-ink); color:var(--c-bg)`
         return `${base}; background:none; border:1px solid var(--c-border); color:var(--c-text-sec); font-weight:500`
       })(),
-      addCompare: () => this.setState(x => ({ cfgs: [x.cfgs[0], { ...x.cfgs[0], hw: x.cfgs[0].hw === 'm4pro' ? 'rtx4090' : 'm4pro' }], lanes: [], racePrompt: '', phase: 'idle' as const })),
+      addCompare: () => this.setState(x => ({ cfgs: [x.cfgs[0], { ...x.cfgs[0], hw: x.cfgs[0].hw === 'm4-pro-24gb' ? 'rtx-4090' : 'm4-pro-24gb' }], lanes: [], racePrompt: '', phase: 'idle' as const })),
       removeCompare: () => this.setState(x => ({ cfgs: [x.cfgs[0]], lanes: [], phase: 'idle' as const })),
       share: () => this.share(),
       shareLabel: s.shared ? 'Copied' : 'Share',
@@ -603,7 +619,7 @@ export class App extends Component<{}, St> {
       applySugg: () => suggQ && this.setState(x => ({ cfgs: x.cfgs.map((cc, j) => j === 0 ? { ...cc, quant: suggQ! } : cc) })),
       tokHelp: 'How many words per second the model streams. ~15 tok/s reads like fast typing; 50+ feels instant.',
       ttftHelp: 'Time to first token: how long the model reads your prompt before it starts answering. Grows with prompt length.',
-      confHelp: 'How solid this prediction is. Measured = benchmarked on this exact setup. Derived = interpolated from similar setups. Estimated = calculated from hardware specs alone.',
+      confHelp: 'How solid this prediction is. Measured = benchmarked on this exact setup. Derived = interpolated from similar setups. Projected = calculated from hardware specs alone.',
       tipTok: s.tip === 'tok', tipTtft: s.tip === 'ttft', tipConf: s.tip === 'conf',
       tipTokOn: () => this.setState({ tip: 'tok' }),
       tipTtftOn: () => this.setState({ tip: 'ttft' }),
@@ -983,8 +999,8 @@ export class App extends Component<{}, St> {
                 ))}
                 <div style="font-size:11.5px; color:var(--c-text-faint); display:flex; gap:16px; flex-wrap:wrap">
                   <span><span style="color:oklch(0.55 0.15 155)">●</span> measured on real hardware</span>
-                  <span><span style="color:oklch(0.68 0.13 85)">●</span> derived from family benchmarks</span>
-                  <span><span style="color:oklch(0.66 0.16 55)">●</span> first-principles estimate</span>
+                  <span><span style="color:oklch(0.68 0.13 85)">●</span> derived from nearby benchmarks</span>
+                  <span><span style="color:oklch(0.66 0.16 55)">●</span> projected from specs alone</span>
                 </div>
               </div>
             )}
