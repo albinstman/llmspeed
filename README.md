@@ -4,7 +4,7 @@ Feel how fast a local LLM runs before you buy the hardware
 
 ## Benchmarks
 
-The model and hardware lists are curated based on popularity. Benchmarks are found and verified for each pair from sources such as [r/LocalLLaMA](https://www.reddit.com/r/LocalLLaMA/), [localscore.ai](https://www.localscore.ai/) and more. Pairs that do not have any verified benchmarks are extrapolated from family of benchmarks or derived from first principles.
+The model and hardware lists are curated based on popularity. Benchmarks are found and verified for each pair from sources such as [r/LocalLLaMA](https://www.reddit.com/r/LocalLLaMA/), [localscore.ai](https://www.localscore.ai/) and more. Pairs that do not have any verified benchmarks are extrapolated from family of benchmarks.
 
 ## Contributing
 
