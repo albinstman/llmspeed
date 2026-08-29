@@ -1,5 +1,15 @@
 # llmspeed
 
-**[llmspeed.dev](https://llmspeed.dev)** — feel how fast a local LLM runs before you buy the hardware.
+Feel how fast a local LLM runs before you buy the hardware
 
-Pick a GPU (or Mac), a model, and a quantization level, then watch a simulated response stream at the token rate that combination actually produces. Compare two configurations side by side, see time-to-first-token, and expand "How we calculated this" for the math behind every number.
+## Benchmarks
+
+The model and hardware lists are curated based on popularity. Benchmarks are found and verified for each pair from sources such as [r/LocalLLaMA](https://www.reddit.com/r/LocalLLaMA/), [localscore.ai](https://www.localscore.ai/) and more. Pairs that do not have any verified benchmarks are extrapolated from family of benchmarks or derived from first principles.
+
+## Contributing
+
+Contributions are most welcome. Submit a PR to update the list. Please cite relevant sources for benchmark claims. 
+
+## Limitations:
+
+Only supports single-GPU setups.
