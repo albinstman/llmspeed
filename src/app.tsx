@@ -1,5 +1,5 @@
 import { Component, type ComponentChild } from 'preact'
-import { HW, MODELS, PRESETS, RESP, SPIN, quantOf, quantsFor, canonHw, canonModel, canonQuant, type Hw, type Model, type Quant } from './data'
+import { HW, MODELS, OFFLOAD, PRESETS, RESP, SPIN, quantOf, quantsFor, canonHw, canonModel, canonQuant, type Hw, type Model, type Quant } from './data'
 import { calc, fmt, type CalcResult, type Fit } from './calc'
 
 // Design knobs — values match the mockup's exported defaults (Tokens Simulator v3).
@@ -454,7 +454,7 @@ export class App extends Component<{}, St> {
       tipFit: s.tip === 'fit' + i,
       tipFitOn: () => this.setState({ tip: 'fit' + i }),
       fitHelp: c.fit === 'fits' ? `Model + context (${c.total.toFixed(1)} GB) fits in the ${c.usable.toFixed(1)} GB of usable memory — full speed.`
-        : c.fit === 'partial' ? `Needs ${c.total.toFixed(1)} GB, only ${c.usable.toFixed(1)} GB fits on the GPU. The rest spills to system RAM — runs ~5–10× slower.`
+        : c.fit === 'partial' ? `Needs ${c.total.toFixed(1)} GB, only ${c.usable.toFixed(1)} GB fits on the GPU. ~${Math.round((1 - c.gpuShare) * 100)}% of the weights are served from system RAM instead — that share streams at RAM speed and caps decode.`
         : `Needs ${c.total.toFixed(1)} GB; only ${c.usable.toFixed(1)} GB available. Doesn't fit, can't run.`,
       showRemove: compare && i === 1,
       showAddRace: !compare && CONFIG.showCompare && CONFIG.comparePlacement === 'config-row',
@@ -492,10 +492,12 @@ export class App extends Component<{}, St> {
         { n: '1', f: `Weights: ${m.total_params_b} B params @ ${q.label} (file size)`, v: `${c.w.toFixed(1)} GB` },
         { n: '2', f: `KV cache @ ${ctx.toLocaleString()} ctx tokens (${m.kv_gb_per_8k} GB per 8k)`, v: `${c.kv.toFixed(1)} GB` },
         { n: '3', f: `Fit: ${c.total.toFixed(1)} GB needed vs ${c.usable.toFixed(1)} GB usable`, v: c.fit === 'fits' ? 'fits' : 'partial offload' },
-        { n: '4', f: c.fromCombo
-          ? `Decode: benchmark range for this combo × context derating${c.fit === 'partial' ? ' × offload penalty' : ''}`
-          : `Decode ≈ bandwidth × efficiency ÷ active weights: ${hw.bandwidth_gbs} GB/s × ${c.eff} ÷ ${c.aw.toFixed(1)} GB${c.fit === 'partial' ? ' × offload penalty' : ''}`, v: `${fmt(c.base)} tok/s` },
-        { n: '5', f: c.fromCombo ? 'Spread: holdout-validated interval' : 'Spread ±15% (engine, thermals, runtime)', v: `${fmt(c.lo)}–${fmt(c.hi)} tok/s` },
+        { n: '4', f: c.fit === 'partial'
+          ? `Decode: hybrid offload — ${Math.round(c.gpuShare * 100)}% of active weights read at GPU speed (${hw.bandwidth_gbs} GB/s × ${c.eff}), ${Math.round((1 - c.gpuShare) * 100)}% at system-RAM speed (~${OFFLOAD.ram_bw_gbs} GB/s)`
+          : c.fromCombo
+          ? 'Decode: benchmark range for this combo × context derating'
+          : `Decode ≈ bandwidth × efficiency ÷ active weights: ${hw.bandwidth_gbs} GB/s × ${c.eff} ÷ ${c.aw.toFixed(1)} GB`, v: `${fmt(c.base)} tok/s` },
+        { n: '5', f: c.fit === 'partial' ? 'Spread: calibrated from measured offload runs (RAM speeds vary)' : c.fromCombo ? 'Spread: holdout-validated interval' : 'Spread ±15% (engine, thermals, runtime)', v: `${fmt(c.lo)}–${fmt(c.hi)} tok/s` },
         { n: '6', f: `Prefill ≈ ${Math.round(c.pre).toLocaleString()} tok/s → ${ctx.toLocaleString()} ÷ that + overhead`, v: `TTFT ${c.ttft < 10 ? c.ttft.toFixed(1) : Math.round(c.ttft)} s` },
       ]
     }

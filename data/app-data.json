@@ -802,6 +802,12 @@
    "ctx_derate_per_8k": 0.9
   }
  },
+ "offload": {
+  "ram_bw_gbs": 48.3,
+  "err_q50": 1.442,
+  "err_q80": 2.063,
+  "n_rows": 48
+ },
  "combos": {
   "rtx-3090|qwen3.6-27b|q4_k_m": {
    "tier": "derived",

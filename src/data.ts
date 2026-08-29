@@ -49,6 +49,15 @@ export interface Coeffs {
   ctx_derate_per_8k: number
 }
 
+export interface OffloadCal {
+  /** effective system-RAM bandwidth serving CPU-resident weights, GB/s */
+  ram_bw_gbs: number
+  /** LOO error factors from offload-row calibration — interval width */
+  err_q50: number
+  err_q80: number
+  n_rows: number
+}
+
 export interface ComboPred {
   tier: Tier
   /** [lo, hi] tok/s at near-zero context; null for wont_run */
@@ -62,6 +71,7 @@ interface AppData {
   hardware: Hw[]
   models: Model[]
   coefficients: Partial<Record<Backend, Coeffs>>
+  offload?: OffloadCal
   /** keyed "hardware_id|model_id|quant" */
   combos: Record<string, ComboPred>
 }
@@ -88,6 +98,8 @@ const FALLBACK_COEFFS: Coeffs = { decode_bw_eff: 0.5, prefill_flops_eff: 0.25, c
 export function coeffs(backend: Backend): Coeffs {
   return DATA.coefficients[backend] ?? FALLBACK_COEFFS
 }
+
+export const OFFLOAD: OffloadCal = DATA.offload ?? { ram_bw_gbs: 55, err_q50: 1.5, err_q80: 2.0, n_rows: 0 }
 
 export function combo(hwId: string, modelId: string, quantId: string): ComboPred | undefined {
   return DATA.combos[`${hwId}|${modelId}|${quantId}`]

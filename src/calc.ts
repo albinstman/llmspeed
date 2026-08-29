@@ -1,4 +1,4 @@
-import { coeffs, combo, PROMPT_PRESET_TOKS, type ComboPred, type Hw, type Model, type Quant } from './data'
+import { coeffs, combo, OFFLOAD, PROMPT_PRESET_TOKS, type ComboPred, type Hw, type Model, type Quant } from './data'
 
 export type Fit = 'fits' | 'partial' | 'no'
 export type Conf = 'measured' | 'derived' | 'projected' | null
@@ -28,6 +28,8 @@ export interface CalcResult {
   aw: number
   /** the range came from a pipeline per-combo prediction, not the coefficient formula */
   fromCombo: boolean
+  /** fraction of model weights resident on GPU (1 unless fit is partial) */
+  gpuShare: number
 }
 
 // Fallback bytes/param per quant, used only when a config references a quant the
@@ -74,11 +76,20 @@ export function calc(hw: Hw, m: Model, q: Quant, ctx: number): CalcResult {
     hi = b * 1.15
     conf = 'projected'
   }
+  // Partial fit: hybrid two-bandwidth model. The GPU-resident share of the
+  // active weights streams at GPU bandwidth, the spilled share at effective
+  // system-RAM bandwidth (calibrated by the pipeline from measured offload
+  // runs) — the two terms add in series. Overrides both paths above: a combo
+  // measured full-GPU says nothing about this card's offload behavior.
+  let gpuShare = 1
   if (fit === 'partial') {
-    const r = usable / total
-    const pen = Math.max(0.05, r * r * 0.45)
-    lo *= pen; hi *= pen
+    gpuShare = usable / total
+    const t = (gpuShare * aw) / (hw.bandwidth_gbs * co.decode_bw_eff) + ((1 - gpuShare) * aw) / OFFLOAD.ram_bw_gbs
+    const mid = derate / t
+    lo = mid / OFFLOAD.err_q80
+    hi = mid * OFFLOAD.err_q80
     conf = 'projected'
+    fromCombo = false
   }
   if (hw.status === 'announced') conf = 'projected'
   const base = (lo + hi) / 2
@@ -88,7 +99,7 @@ export function calc(hw: Hw, m: Model, q: Quant, ctx: number): CalcResult {
   const ttft = ctx / pre + (fit === 'partial' ? 1.2 : 0.3)
 
   if (fit === 'no') conf = null
-  return { w, kv, usable, total, fit, base, lo, hi, pre, ttft, conf, eff: co.decode_bw_eff, aw, fromCombo }
+  return { w, kv, usable, total, fit, base, lo, hi, pre, ttft, conf, eff: co.decode_bw_eff, aw, fromCombo, gpuShare }
 }
 
 export function fmt(x: number): string {
