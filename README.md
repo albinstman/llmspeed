@@ -1,6 +1,6 @@
-# llmspeed
+# ⚡ llmspeed
 
-Feel how fast a local LLM runs before you buy the hardware
+Feel how fast a local LLM runs before you buy the hardware.
 
 ## Benchmarks
 
